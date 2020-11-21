@@ -8,3 +8,4 @@ RUN \
 
 COPY inputrc /root/.inputrc
 ADD bashrc /root/.bashrc
+CMD ["/bin/bash"]

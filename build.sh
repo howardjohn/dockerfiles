@@ -47,13 +47,15 @@ while (( "$#" )); do
 done
 
 function check_image_exits() {
-  docker manifest inspect "${1:?image name}" --insecure &> /dev/null
+  return docker manifest inspect "${1:?image name}" --insecure &> /dev/null
 }
 
 function fetch_tags() {
   name="${1:?name}"
   if [ -f "${name}/settings" ]; then
-    grep TAGS= "${name}/settings" | cut -d= -f2
+    version=$(grep VERSION= "${name}/settings" | cut -d= -f2)
+    tags=$(grep TAGS= "${name}/settings" | cut -d= -f2)
+    echo "$version $tags"
   else
     echo "latest"
   fi
@@ -62,12 +64,11 @@ function fetch_tags() {
 function missing_tags() {
   name="${1:?name}"
   tags=""
-  for tag in $(fetch_tags "${name}"); do
-    if [[ ! $(check_image_exits "${HUB}/${name}:${tag}") ]]; then
-      tags+="${tag} "
-    fi
-  done
-  echo "${tags}"
+  tags="$(fetch_tags "${name}")"
+  primary="$(echo $tags | cut -d' ' -f1)"
+  if ! docker manifest inspect "${HUB}/${name}:${primary}" --insecure &> /dev/null; then
+    echo "${tags}"
+  fi
 }
 
 function wrap_quotes() {
@@ -122,6 +123,7 @@ function generate() {
     if [ -f "${name}/Dockerfile" ]; then
       tags="$(missing_tags "${name}")"
       if [[ "${tags}" == "" ]]; then
+        echo "Skipping \"${name}\""
         continue
       fi
       targets+="${name} "
@@ -129,10 +131,18 @@ function generate() {
       generate_bake "${name}" "${tags}"
     fi
   done
+  if [[ "${targets}" == "" ]]; then
+    echo "No targets to build"
+    return
+  fi
   generate_bake_group "${targets}"
 }
 
 generate
-if [[ "${DRY_RUN}" == 0 ]]; then
+if [[ "${DRY_RUN}" == 1 ]]; then
+  echo "Skipping build due to dry run"
+  exit 0
+fi
+if [[ -f build/docker-bake.hcl ]]; then
   docker buildx bake -f build/docker-bake.hcl "${TARGET}"
 fi
