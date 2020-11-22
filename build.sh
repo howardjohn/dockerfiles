@@ -46,6 +46,20 @@ while (( "$#" )); do
   esac
 done
 
+_red='\e[0;31m'
+_green='\e[0;32m'
+_yellow='\e[0;33m'
+_clr='\e[0m'
+function yellow() {
+  echo -e "$_yellow"$*"$_clr"
+}
+function green() {
+  echo -e "$_green"$*"$_clr"
+}
+function red() {
+  echo -e "$_red"$*"$_clr"
+}
+
 function check_image_exits() {
   return docker manifest inspect "${1:?image name}" --insecure &> /dev/null
 }
@@ -123,16 +137,16 @@ function generate() {
     if [ -f "${name}/Dockerfile" ]; then
       tags="$(missing_tags "${name}")"
       if [[ "${tags}" == "" ]]; then
-        echo "Skipping \"${name}\""
+        yellow "Skipping \"${name}\""
         continue
       fi
       targets+="${name} "
-      echo Building image \"${name}\" tags: "${tags}"
+      green Building image \"${name}\" tags: "${tags}"
       generate_bake "${name}" "${tags}"
     fi
   done
   if [[ "${targets}" == "" ]]; then
-    echo "No targets to build"
+    yellow "No targets to build"
     return
   fi
   generate_bake_group "${targets}"
@@ -140,7 +154,7 @@ function generate() {
 
 generate
 if [[ "${DRY_RUN}" == 1 ]]; then
-  echo "Skipping build due to dry run"
+  yellow "Skipping build due to dry run"
   exit 0
 fi
 if [[ -f build/docker-bake.hcl ]]; then

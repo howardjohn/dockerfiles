@@ -1,0 +1,56 @@
+# Allow 8-bit input/output
+set meta-flag on
+set convert-meta off
+set input-meta on
+set output-meta on
+
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+"\e[1~": beginning-of-line
+"\e[4~": end-of-line
+"\e[7~": beginning-of-line
+"\e[8~": end-of-line
+"\eOH": beginning-of-line
+"\eOF": end-of-line
+"\e[H": beginning-of-line
+"\e[F": end-of-line
+"\e[/": possible-completions
+"\t": menu-complete
+"\e[Z": complete
+
+set bell-style none
+
+set completion-ignore-case on
+set completion-map-case on
+set show-all-if-ambiguous on
+set show-all-if-unmodified on
+set completion-prefix-display-length 4
+set colored-stats on
+set visible-stats on
+set colored-completion-prefix on
+set mark-directories on
+set mark-symlinked-directories on
+
+set match-hidden-files on
+
+"\e[1;5C": forward-word   # ctrl + right
+"\e[1;5D": backward-word  # ctrl + left
+"\e[1;3D": backward-word  # Alt left
+"\e[1;3C": forward-word   # Alt right
+"\C-h": backward-kill-word # ctrl + delete
+
+# Go to previous dir with alt-z
+"\ez": 'cd - > /dev/null\015'
+
+# Turn smart quotes into normal quotes.
+"\xE2\x80\x9C": "\""
+"\xE2\x80\x9D": "\""
+"\xE2\x80\x98": "'"
+"\xE2\x80\x99": "'"
+# Turn non-breaking space into a normal space.
+"\xC2\xA0": " "
+# Minus and em-dash into plain dashes.
+"\xE2\x80\x93": "-"
+"\xE2\x80\x94": "--"
+# Ellipsis...
+"\xE2\x80\xA6": "..."
