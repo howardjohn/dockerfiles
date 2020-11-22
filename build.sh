@@ -10,11 +10,16 @@ rm -f "${OUT}"
 HUB="${HUB:-localhost:5000}"
 TARGET="${TARGET:-all}"
 DRY_RUN="${DRY_RUN:-0}"
+FORCE="${FORCE:-0}"
 
 while (( "$#" )); do
   case "$1" in
     -n|--dry-run)
       DRY_RUN=1
+      shift
+      ;;
+    -f|--force)
+      FORCE=1
       shift
       ;;
     -h|--hub)
@@ -61,7 +66,11 @@ function red() {
 }
 
 function check_image_exits() {
-  return docker manifest inspect "${1:?image name}" --insecure &> /dev/null
+  if [[ "${FORCE}" == 1 ]]; then
+    return 0
+  else
+    ! docker manifest inspect "${1:?image name}" --insecure &> /dev/null
+  fi
 }
 
 function fetch_tags() {
@@ -80,7 +89,7 @@ function missing_tags() {
   tags=""
   tags="$(fetch_tags "${name}")"
   primary="$(echo $tags | cut -d' ' -f1)"
-  if ! docker manifest inspect "${HUB}/${name}:${primary}" --insecure &> /dev/null; then
+  if check_image_exits "${HUB}/${name}:${primary}"; then
     echo "${tags}"
   fi
 }
