@@ -143,6 +143,9 @@ function generate() {
   targets=""
   for dir in */; do
     name="${dir%/}"
+    if [[ "${TARGET}" != "${name}" && "${TARGET}" != "all" ]]; then
+      continue
+    fi
     if [ -f "${name}/Dockerfile" ]; then
       tags="$(missing_tags "${name}")"
       if [[ "${tags}" == "" ]]; then
