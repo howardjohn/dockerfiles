@@ -1,3 +1,4 @@
+use std::env;
 use std::io;
 use std::net::SocketAddr;
 use std::thread;
@@ -33,11 +34,15 @@ where
     let mut core = Core::new().expect("core");
     let handle = core.handle();
 
+    let port = env::var("PORT").unwrap_or("8080".to_string());
+
+    let port_num: u16 = port.parse().unwrap_or(8080);
+
     // Bind to 0.0.0.0:8080
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port_num));
     let tcp = reuse_listener(&addr, &handle).expect("couldn't bind to addr");
 
-    eprintln!("listeneing on 0.0.0.0:8080");
+    eprintln!("listening on 0.0.0.0:{}", port);
 
     // For every accepted connection, spawn an HTTP task
     let server = tcp
