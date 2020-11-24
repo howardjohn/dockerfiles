@@ -7,6 +7,8 @@ set -eu
 
 OUT="build/docker-bake.hcl"
 rm -f "${OUT}"
+mkdir -p "build/"
+touch "${OUT}"
 HUB="${HUB:-localhost:5000}"
 TARGET="${TARGET:-all}"
 DRY_RUN="${DRY_RUN:-0}"
@@ -119,11 +121,14 @@ function generate_bake() {
   cat <<EOF >> "${OUT}"
 target "${name}" {
     tags = [$(tags_to_image_list "${name}" "${tags}")]
-    args = {}
+    args = {
+      BUILDKIT_INLINE_CACHE = "1"
+    }
     context = "${name}"
     platforms = [
         "linux/amd64",
     ]
+    cache-from = ["localhost:500/${name}:latest", "howardjohn/${name}:latest", "gcr.io/howardjohn-istio/${name}:latest"]
     output = ["type=registry"]
 }
 EOF
