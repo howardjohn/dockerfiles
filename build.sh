@@ -164,12 +164,12 @@ function generate() {
   done
   if [[ "${targets}" == "" ]]; then
     yellow "No targets to build"
-    return
+    return 1
   fi
   generate_bake_group "${targets}"
 }
 
-generate
+generate || exit
 if [[ "${DRY_RUN}" == 1 ]]; then
   yellow "Skipping build due to dry run"
   exit 0
