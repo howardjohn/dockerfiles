@@ -1,4 +1,4 @@
-FROM rust:1.48 as builder
+FROM rust:1.49 as builder
 
 ADD ./ /hyper
 WORKDIR /hyper
