@@ -128,7 +128,7 @@ target "${name}" {
     platforms = [
         "linux/amd64",
     ]
-    cache-from = ["localhost:500/${name}:latest", "howardjohn/${name}:latest", "gcr.io/howardjohn-istio/${name}:latest"]
+    cache-from = ["localhost:5000/${name}:latest", "howardjohn/${name}:latest", "gcr.io/howardjohn-istio/${name}:latest"]
     output = ["type=registry"]
 }
 EOF

@@ -10,6 +10,7 @@ RUN \
     iputils \
     jq \
     tcpdump \
+    knot-utils \
     iptables
 
 COPY inputrc /root/.inputrc
