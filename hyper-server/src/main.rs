@@ -19,9 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let server = Server::bind(&addr).serve(service);
         v.push(server);
     }
-    for w in v {
-        w.await?;
-    }
+    futures::future::join_all(v).await;
 
     Ok(())
 }
