@@ -11,6 +11,7 @@ RUN \
     jq \
     tcpdump \
     knot-utils \
+    bind-tools \
     iptables
 
 COPY inputrc /root/.inputrc
