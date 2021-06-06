@@ -49,4 +49,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
-static HELLO_WORLD: &'static [u8] = b"Hello, world!";
+static HELLO_WORLD: &'static [u8] = b"";
