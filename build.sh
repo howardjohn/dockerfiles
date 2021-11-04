@@ -33,7 +33,7 @@ while (( "$#" )); do
         exit 1
       fi
       ;;
-    -t|--taregt)
+    -t|--target)
       if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
         TARGET=$2
         shift 2
@@ -127,8 +127,8 @@ target "${name}" {
     context = "${name}"
     platforms = [
         "linux/amd64",
+        "linux/arm64",
     ]
-    cache-from = ["localhost:5000/${name}:latest", "howardjohn/${name}:latest", "gcr.io/howardjohn-istio/${name}:latest"]
     output = ["type=registry"]
 }
 EOF
