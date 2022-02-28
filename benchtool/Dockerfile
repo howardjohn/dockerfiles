@@ -1,5 +1,5 @@
 FROM envoyproxy/nighthawk-dev:e9623db69db2236eccdaace5b22d4a65bfb940c1 as nighthawk
-FROM fortio/fortio:1.19.0 as fortio
+FROM fortio/fortio:1.21.0 as fortio
 FROM howardjohn/wrk2 as wrk
 FROM ubuntu:focal
 
