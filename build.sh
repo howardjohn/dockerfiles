@@ -9,9 +9,10 @@ OUT="build/docker-bake.hcl"
 rm -f "${OUT}"
 mkdir -p "build/"
 touch "${OUT}"
-HUB="${HUB:-localhost:5000}"
+HUBS=""
 TARGET="${TARGET:-all}"
 DRY_RUN="${DRY_RUN:-0}"
+PARAMS=""
 FORCE="${FORCE:-0}"
 
 while (( "$#" )); do
@@ -26,7 +27,7 @@ while (( "$#" )); do
       ;;
     -h|--hub)
       if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
-        HUB=$2
+        HUBS+=" $2"
         shift 2
       else
         echo "Error: Argument for $1 is missing" >&2
@@ -53,6 +54,8 @@ while (( "$#" )); do
   esac
 done
 
+HUBS="${HUBS:-localhost:5000}"
+
 _red='\e[0;31m'
 _green='\e[0;32m'
 _yellow='\e[0;33m'
@@ -71,7 +74,7 @@ function check_image_exits() {
   if [[ "${FORCE}" == 1 ]]; then
     return 0
   else
-    ! docker manifest inspect "${1:?image name}" --insecure &> /dev/null
+    ! crane manifest "${1:?image name}" &> /dev/null
   fi
 }
 
@@ -86,14 +89,26 @@ function fetch_tags() {
   fi
 }
 
-function missing_tags() {
+function fetch_version() {
+  name="${1:?name}"
+  if [ -f "${name}/settings" ]; then
+    version=$(grep VERSION= "${name}/settings" | cut -d= -f2)
+    echo "$version"
+  fi
+}
+
+function missing_images() {
   name="${1:?name}"
   tags=""
   tags="$(fetch_tags "${name}")"
   primary="$(echo $tags | cut -d' ' -f1)"
-  if check_image_exits "${HUB}/${name}:${primary}"; then
-    echo "${tags}"
-  fi
+  for hub in ${HUBS}; do
+    if check_image_exits "${hub}/${name}:${primary}"; then
+      for tag in ${tags}; do
+        echo "${hub}/${name}:${tag}"
+      done
+    fi
+  done
 }
 
 function wrap_quotes() {
@@ -109,8 +124,10 @@ function tags_to_image_list() {
   name="${1:?name}"
   tags="${2:?tags}"
   result=""
-  for tag in ${tags}; do
-    result+="${HUB}/${name}:${tag} "
+  for hub in ${HUBS}; do
+    for tag in ${tags}; do
+      result+="${hub}/${name}:${tag} "
+    done
   done
   wrap_quotes "${result}"
 }
@@ -118,11 +135,13 @@ function tags_to_image_list() {
 function generate_bake() {
   name="${1:?name}"
   tags="${2:?tags}"
+  version="${3:?version}"
   cat <<EOF >> "${OUT}"
 target "${name}" {
-    tags = [$(tags_to_image_list "${name}" "${tags}")]
+    tags = [$(wrap_quotes "${tags}")]
     args = {
       BUILDKIT_INLINE_CACHE = "1"
+      VERSION = "${version}"
     }
     context = "${name}"
     platforms = [
@@ -152,14 +171,15 @@ function generate() {
       continue
     fi
     if [ -f "${name}/Dockerfile" ]; then
-      tags="$(missing_tags "${name}")"
-      if [[ "${tags}" == "" ]]; then
+      images="$(missing_images "${name}")"
+      if [[ "${images}" == "" ]]; then
         yellow "Skipping \"${name}\""
         continue
       fi
+      version="$(fetch_version "${name}")"
       targets+="${name} "
-      green Building image \"${name}\" tags: "${tags}"
-      generate_bake "${name}" "${tags}"
+      green "Building image \"${name}\" version: ${version}"
+      generate_bake "${name}" "${images}" "${version}"
     fi
   done
   if [[ "${targets}" == "" ]]; then
