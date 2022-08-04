@@ -1,7 +1,9 @@
-FROM envoyproxy/nighthawk-dev:e9623db69db2236eccdaace5b22d4a65bfb940c1 as nighthawk
-FROM fortio/fortio:1.30.0 as fortio
+FROM envoyproxy/nighthawk-dev@sha256:95751e0c2c042a5a52d4a84912654fa1d21f1df1a3ab925f3985dc3832fdf29c as nighthawk
+FROM fortio/fortio:1.34.1 as fortio
 FROM howardjohn/wrk2 as wrk
 FROM ubuntu:jammy
+
+ARG TARGETARCH
 
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
@@ -10,6 +12,7 @@ RUN apt-get update && \
     bc \
     python3 \
     bsdmainutils \
+    jq \
     && apt-get clean -y \
     && rm -rf /var/cache/debconf/* /var/lib/apt/lists/* \
     /var/log/* /tmp/*  /var/tmp/*
@@ -17,12 +20,11 @@ RUN apt-get update && \
 COPY --from=nighthawk /usr/local/bin/nighthawk_client /usr/bin/nighthawk
 COPY --from=fortio /usr/bin/fortio /usr/bin/fortio
 COPY --from=wrk /usr/bin/wrk /usr/bin/wrk
-ADD  https://gobinaries.com/binary/github.com/rakyll/hey?os=linux&arch=amd64&version=v0.1.4 /usr/bin/hey
+ADD  https://gobinaries.com/binary/github.com/rakyll/hey?os=linux&arch=${TARGETARCH}&version=v0.1.4 /usr/bin/hey
 RUN chmod +x /usr/bin/hey
+# TODO https://github.com/hatoo/oha/issues/174
 ADD  https://github.com/hatoo/oha/releases/download/v0.5.2/oha-linux-amd64 /usr/bin/oha
 RUN chmod +x /usr/bin/oha
-ADD https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 /usr/bin/jq
-RUN chmod +x /usr/bin/jq
 
 ADD benchmark.sh /usr/bin/benchmark
 
