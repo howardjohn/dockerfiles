@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.60.0-slim AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.63.0-slim AS chef
 WORKDIR app
 
 FROM chef AS planner
@@ -13,9 +13,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release
 
-RUN cargo chef prepare --recipe-path recipe.json
-
-FROM gcr.io/distroless/cc-debian10:nonroot
+FROM gcr.io/distroless/cc-debian11:nonroot
 
 COPY --from=builder /app/target/release/hyper-server /usr/bin/hyper
 

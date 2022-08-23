@@ -49,7 +49,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         Ok::<_, Infallible>(service_fn(move |mut req: Request<Body>| {
                             let client = client.clone();
                             let frt = frt.clone();
-                            *req.uri_mut() = ("http://".to_owned() + &orig.to_string() + &req.uri().path().to_string()).parse().unwrap();
+                            // TODO: use original IP, but this would require local bind to 127.0.0.6
+                            *req.uri_mut() = ("http://127.0.0.1:".to_owned() + &orig.port().to_string() + &req.uri().path().to_string()).parse().unwrap();
                             // let request = Request::builder()
                             //     .method(req.method())
                             //     .version(req.version())
