@@ -10,8 +10,12 @@ path = "src/main.rs"
 
 [dependencies]
 futures = "0.3.12"
-hyper = { version = "0.14.15", features = ["full"] }
+hyper = { version = "0.14", features = ["full"] }
+libc = "0.2.132"
+log = "0.4.17"
 tokio = {"version"= "1", features=["rt-multi-thread", "macros"]}
+tracing = "0.1.36"
+tracing-subscriber = "0.3.15"
 
 [profile.release]
 opt-level = 3
