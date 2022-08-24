@@ -48,6 +48,7 @@ benchmark runs various load generators with varying settings.
 All options listed below can pass a single value, or a comma separated value.
 
 Example: benchmark --qps 10,100 --connections 64 http://localhost:8080
+Example (mulitple destination with alias): benchmark http://some-long-name/target-default#default,http://some-long-name/target-test#test
 
 Options:
   -c, --connections   Number of connections to open
