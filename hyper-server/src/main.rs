@@ -104,7 +104,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     info!("Listening on http://{}", addr);
                     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
                     while let Ok((inbound, socket)) = listener.accept().await {
-                        let orig = orig_dst_addr(&inbound).unwrap_or(inbound.peer_addr().unwrap());
+                        let mut orig = orig_dst_addr(&inbound).unwrap_or(inbound.peer_addr().unwrap());
+                        // TODO: use original IP, but this would require local bind to 127.0.0.6
+                        orig.set_ip("127.0.0.1".parse().unwrap());
                         let transfer = transfer(inbound, orig).map(|r| {
                             if let Err(e) = r {
                                 warn!("Failed to transfer; error={}", e);
@@ -124,7 +126,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 let addr: std::net::SocketAddr = ("[::]:".to_owned() + port).parse()?;
                 println!("Listening on http://{}", addr);
                 let first_request_time: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
-                let directService = make_service_fn(move |socket: &AddrStream| {
+                let direct_service = make_service_fn(move |socket: &AddrStream| {
                     let frt = first_request_time.clone();
                     async move {
                         Ok::<_, Infallible>(service_fn(move |_req: Request<Body>| {
@@ -144,7 +146,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         }))
                     }
                 });
-                let server = Server::bind(&addr).serve(directService);
+                let server = Server::bind(&addr).serve(direct_service);
                 v.push(server);
             }
             futures::future::join_all(v).await;
