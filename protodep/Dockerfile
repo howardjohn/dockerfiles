@@ -7,7 +7,7 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go install github.com/stormcat24/protodep@
 
 RUN find /go/bin -type f -exec cp {} /go/bin/protodep \;
 
-FROM gcr.io/distroless/base-debian10:nonroot
+FROM cgr.dev/chainguard/static
 
 COPY --from=builder /go/bin/protodep /usr/bin/protodep
 
