@@ -1,5 +1,5 @@
-FROM cgr.dev/chainguard/python
+FROM cgr.dev/chainguard/python:latest-dev
 
-RUN pip3 install subliminal
+RUN pip install subliminal
 
 ENTRYPOINT ["subliminal", "--cache-dir", "/usr/src/cache"]

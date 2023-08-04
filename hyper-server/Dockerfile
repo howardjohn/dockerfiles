@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.70.0-slim AS chef
+FROM --platform=$BUILDPLATFORM howardjohn/rust-${BUILDARCH}-${TARGETARCH} AS chef
 WORKDIR app
 
 FROM chef AS planner
@@ -12,6 +12,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
 RUN cargo build --release
+RUN mv target/${CARGO_BUILD_TARGET}/release/hyper-server target/release/hyper-server
 
 FROM cgr.dev/chainguard/cc-dynamic:latest
 

@@ -8,8 +8,8 @@ variable "platforms" {
 
 images = [
   {
-    name    = "benchtool"
-    version = "v0.0.6"
+    name         = "benchtool"
+    version      = "v0.0.6"
     dependencies = ["wrk2", "nettools"]
   },
   {
@@ -23,6 +23,7 @@ images = [
   {
     name    = "hyper-server"
     version = "v0.0.13"
+    dependencies = ["rust-amd64-amd64", "rust-amd64-arm64"]
   },
   {
     name         = "kubectl"
@@ -37,10 +38,6 @@ images = [
     name         = "nettools"
     version      = "v0.0.6"
     dependencies = ["shell"]
-  },
-  {
-    name    = "protodep"
-    version = "v0.1.8"
   },
   {
     name         = "scuttle-shell"
@@ -62,6 +59,19 @@ images = [
   {
     name    = "wrk2"
     version = "v0.0.2"
+    platforms = ["linux/amd64"]
+  },
+  // Rust AMD64 -> AMD64
+  {
+    name    = "rust-amd64-amd64"
+    version = "v1.70.0"
+    platforms = ["linux/amd64"]
+  },
+  // Rust AMD64 -> ARM64
+  {
+    name    = "rust-amd64-arm64"
+    version = "v1.70.0"
+    platforms = ["linux/amd64"]
   },
 ]
 
@@ -79,6 +89,6 @@ target "all" {
     for x in setproduct(hubs, ["latest", item.version]) : join("/${item.name}:", x)
   ]
   contexts  = {for x in lookup(item, "dependencies", []) : "howardjohn/${x}" => "target:${x}"}
-  platforms = platforms
+  platforms = lookup(item, "platforms", platforms)
   output    = ["type=registry"]
 }
