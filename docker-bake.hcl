@@ -63,7 +63,6 @@ images = [
     name    = "wrk2"
     version = "v0.0.2"
   },
-
 ]
 
 target "all" {
