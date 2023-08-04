@@ -45,6 +45,11 @@ while (( "$#" )); do
   esac
 done
 
+EXTRA=""
+if [[ "${REMOTE}" == 1 ]]; then
+  EXTRA="-f remote.hcl"
+fi
+
 _green='\e[0;32m'
 _yellow='\e[0;33m'
 _clr='\e[0m'
@@ -55,7 +60,6 @@ function green() {
   echo -e "$_green"$*"$_clr"
 }
 
-
 # image_exists returns 1 if the image is missing, 0 if present
 function image_exists() {
   if [[ "${FORCE}" == 1 ]]; then
@@ -65,7 +69,7 @@ function image_exists() {
   fi
 }
 
-definition="$(docker-buildx bake all --print --progress=none -f docker-bake.hcl)"
+definition="$(docker-buildx bake all --print --progress=none -f docker-bake.hcl $EXTRA)"
 needed=()
 for target in $(<<<$definition jq -r '.group.all.targets[]'); do
   if [[ "${TARGET}" != "${target}" && "${TARGET}" != "all" ]]; then
@@ -89,10 +93,6 @@ for target in $(<<<$definition jq -r '.group.all.targets[]'); do
   [[ $need -eq 0 ]] && green "Skipping ${target}"
 done
 
-EXTRA=""
-if [[ "${REMOTE}" == 1 ]]; then
-  EXTRA="-f remote.hcl"
-fi
 
 if [[ ${#needed[@]} == 0 ]]; then
   yellow "No images to build"
