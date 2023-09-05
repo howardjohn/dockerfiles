@@ -9,7 +9,7 @@ variable "platforms" {
 images = [
   {
     name         = "benchtool"
-    version      = "v0.0.6"
+    version      = "v0.0.9"
     dependencies = ["wrk2", "nettools"]
   },
   {

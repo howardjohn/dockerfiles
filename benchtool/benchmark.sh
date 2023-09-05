@@ -149,7 +149,7 @@ function run_benchmark() {
   case "$tool" in
   fortio)
     rm -f "${RESULTS_DIR}/fortio" &> /dev/null
-    run fortio load -uniform="${JITTER}" -qps "${qps}" -t "${dur}"s -c "${cons}" -json "${RESULTS_DIR}"/fortio.json "${dest}"
+    run fortio load -uniform="${JITTER}" -qps "${qps}" -t "${dur}"s -c "${cons}" -json "${RESULTS_DIR}"/fortio.json -r 0.00001 "${dest}"
     req=$(< "${RESULTS_DIR}"/fortio.json jq -r '.RetCodes."200"')
     throughput=$(< "${RESULTS_DIR}"/fortio.json jq '.ActualQPS' | fmt_qps)
     p50=$(< "${RESULTS_DIR}"/fortio.json jq '.DurationHistogram.Percentiles[] | select(.Percentile == 50).Value' | to_ms)
