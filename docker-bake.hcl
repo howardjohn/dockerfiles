@@ -22,12 +22,12 @@ images = [
   },
   {
     name    = "hyper-server"
-    version = "v0.0.13"
+    version = "v0.0.14"
     dependencies = ["rust-amd64-amd64", "rust-amd64-arm64"]
   },
   {
     name         = "kubectl"
-    version      = "v1.27.0"
+    version      = "v1.28.0"
     dependencies = ["shell"]
   },
   {
@@ -36,17 +36,17 @@ images = [
   },
   {
     name         = "nettools"
-    version      = "v0.0.6"
-    dependencies = ["shell"]
-  },
-  {
-    name         = "scuttle-shell"
     version      = "v0.0.7"
     dependencies = ["shell"]
   },
   {
+    name         = "scuttle-shell"
+    version      = "v0.0.8"
+    dependencies = ["shell"]
+  },
+  {
     name    = "shell"
-    version = "v0.0.7"
+    version = "v0.0.8"
   },
   {
     name    = "subliminal"
@@ -64,13 +64,13 @@ images = [
   // Rust AMD64 -> AMD64
   {
     name    = "rust-amd64-amd64"
-    version = "v1.70.0"
+    version = "v1.74.0"
     platforms = ["linux/amd64"]
   },
   // Rust AMD64 -> ARM64
   {
     name    = "rust-amd64-arm64"
-    version = "v1.70.0"
+    version = "v1.74.0"
     platforms = ["linux/amd64"]
   },
 ]
