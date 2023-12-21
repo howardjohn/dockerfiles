@@ -13,10 +13,6 @@ images = [
     dependencies = ["wrk2", "nettools"]
   },
   {
-    name    = "filebot"
-    version = "v0.0.2"
-  },
-  {
     name    = "go-ci"
     version = "v0.0.5"
   },
