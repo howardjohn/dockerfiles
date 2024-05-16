@@ -69,7 +69,7 @@ function image_exists() {
   fi
 }
 
-definition="$(docker-buildx bake all --print --progress=none -f docker-bake.hcl $EXTRA)"
+definition="$(docker buildx bake all --print --progress=plain -f docker-bake.hcl $EXTRA)"
 needed=()
 for target in $(<<<$definition jq -r '.group.all.targets[]'); do
   if [[ "${TARGET}" != "${target}" && "${TARGET}" != "all" ]]; then
@@ -101,9 +101,9 @@ fi
 
 if [[ "${DRY_RUN}" == 1 ]]; then
   yellow "Skipping build due to dry run"
-  docker-buildx bake ${needed[@]} --print --progress=none -f docker-bake.hcl $EXTRA
+  docker buildx bake ${needed[@]} --print --progress=plain -f docker-bake.hcl $EXTRA
   exit 0
 fi
 
-docker-buildx bake ${needed[@]} -f docker-bake.hcl $EXTRA
+docker buildx bake ${needed[@]} -f docker-bake.hcl $EXTRA
 

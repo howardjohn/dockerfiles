@@ -56,17 +56,19 @@ Options:
   -d, --duration      Number of seconds to run for
   -t, --tool          Tool to use. Valid options are fortio,hey,oha,nighthawk,wrk
   -b, --burst         Send requests in bursts.
+  -p, --payload       Payload size (only fortio)
 EOF
 }
 
 # Default values of arguments
-CONNECTIONS=50
-QPS=100
-DURATION=10
+CONNECTIONS=16
+QPS=500
+DURATION=5
 DESTINATION=""
 JITTER="true"
 VERBOSE=""
-TOOL=fortio,hey,oha,nighthawk,wrk
+PAYLOAD=0
+TOOL=fortio
 
 RESULTS_DIR="${RESULTS_DIR:-/tmp/results}"
 mkdir -p "${RESULTS_DIR}"
@@ -94,6 +96,11 @@ while (( "$#" )); do
     shift
     shift
     ;;
+    -p|--payload)
+    PAYLOAD="$2"
+    shift
+    shift
+    ;;
     -b|--burst)
     JITTER="false"
     shift
@@ -117,6 +124,7 @@ blue "# Connections: $CONNECTIONS"
 blue "# Duration: $DURATION"
 blue "# QPS: $QPS"
 blue "# Destination: ${DESTINATION}"
+blue "# Payload: ${PAYLOAD}"
 blue "# Results: ${RESULTS_DIR}"
 blue "# Jitter: ${JITTER}"
 blue "# Tool: ${TOOL}"
@@ -126,15 +134,22 @@ if [[ "${DESTINATION}" == "" ]]; then
   exit 1
 fi
 
+function fail() {
+  output="${1}"
+  >&2 echo "COMMAND FAILED"
+  >&2 cat "${RESULTS_DIR}/${output}.log"
+  exit 1
+}
+
 function run() {
   output="${1}"
   if [[ "${VERBOSE}" == "true" ]]; then
     debug "Running: $@"
   fi
   if [[ "${VERBOSE}" == "true" ]]; then
-    $@ > >(tee "${RESULTS_DIR}/${output}" >&2) 2> >(tee "${RESULTS_DIR}/${output}.log" >&2)
+    $@ > >(tee "${RESULTS_DIR}/${output}" >&2) 2> >(tee "${RESULTS_DIR}/${output}.log" >&2) || fail "${output}"
   else
-    $@ > "${RESULTS_DIR}/${output}" 2> "${RESULTS_DIR}/${output}.log"
+    $@ > "${RESULTS_DIR}/${output}" 2> "${RESULTS_DIR}/${output}.log" || fail "${output}"
   fi
 }
 
@@ -143,13 +158,14 @@ function run_benchmark() {
   qps="$2"
   dur="$3"
   cons="$4"
-  destName="$(echo $5 | cut -d# -f2-)"
-  dest="$(echo $5 | cut -d# -f1)"
+  payload="$5"
+  destName="$(echo $6 | cut -d# -f2-)"
+  dest="$(echo $6 | cut -d# -f1)"
   green "Running $tool to $destName at $qps QPS for ${dur}s and ${cons} connections..."
   case "$tool" in
   fortio)
     rm -f "${RESULTS_DIR}/fortio" &> /dev/null
-    run fortio load -uniform="${JITTER}" -qps "${qps}" -t "${dur}"s -c "${cons}" -json "${RESULTS_DIR}"/fortio.json -r 0.00001 "${dest}"
+    run fortio load -uniform="${JITTER}" -qps "${qps}" -t "${dur}"s -c "${cons}" -payload-size "${payload}" -json "${RESULTS_DIR}"/fortio.json -r 0.00001 "${dest}"
     req=$(< "${RESULTS_DIR}"/fortio.json jq -r '.RetCodes."200"')
     throughput=$(< "${RESULTS_DIR}"/fortio.json jq '.ActualQPS' | fmt_qps)
     p50=$(< "${RESULTS_DIR}"/fortio.json jq '.DurationHistogram.Percentiles[] | select(.Percentile == 50).Value' | to_ms)
@@ -216,7 +232,7 @@ function run_benchmark() {
     ;;
   esac
   debug "qps: $throughput\tp50: $p50\tp90: $p90\tp99: $p99"
-  echo "$destName,$tool,$qps,$cons,$dur,$req,$throughput,$p50,$p90,$p99"
+  echo "$destName,$tool,$qps,$cons,$dur,$payload,$req,$throughput,$p50,$p90,$p99"
 }
 
 
@@ -224,10 +240,12 @@ results=""
 for cons in ${CONNECTIONS//,/ }; do
   for dur in ${DURATION//,/ }; do
     for qps in ${QPS//,/ }; do
-      for tool in ${TOOL//,/ }; do
-        for destination in ${DESTINATION//,/ }; do
-          res="$(run_benchmark $tool $qps $dur $cons $destination)"
-          results+="${res}\n"
+      for payload in ${PAYLOAD//,/ }; do
+        for tool in ${TOOL//,/ }; do
+          for destination in ${DESTINATION//,/ }; do
+            res="$(run_benchmark $tool $qps $dur $cons $payload $destination)"
+            results+="${res}\n"
+          done
         done
       done
     done
@@ -235,6 +253,6 @@ for cons in ${CONNECTIONS//,/ }; do
 done
 
 {
-  echo "DEST,CLIENT,QPS,CONS,DUR,SUCCESS,THROUGHPUT,P50,P90,P99"
+  echo "DEST,CLIENT,QPS,CONS,DUR,PAYLOAD,SUCCESS,THROUGHPUT,P50,P90,P99"
   echo -e "$results"
 } | column -ts,

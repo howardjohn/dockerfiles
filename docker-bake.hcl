@@ -9,7 +9,7 @@ variable "platforms" {
 images = [
   {
     name         = "benchtool"
-    version      = "v0.0.9"
+    version      = "v0.0.11"
     dependencies = ["wrk2", "nettools"]
   },
   {
@@ -18,7 +18,7 @@ images = [
   },
   {
     name    = "hyper-server"
-    version = "v0.0.14"
+    version = "v0.0.15"
     dependencies = ["rust-amd64-amd64", "rust-amd64-arm64"]
   },
   {
@@ -28,7 +28,13 @@ images = [
   },
   {
     name    = "netperf"
+    version = "v0.0.3"
+    dependencies = ["shell", "rust-amd64-amd64", "rust-amd64-arm64"]
+  },
+  {
+    name    = "hp-netperf"
     version = "v0.0.1"
+    dependencies = ["shell"]
   },
   {
     name         = "nettools"
@@ -42,7 +48,7 @@ images = [
   },
   {
     name    = "shell"
-    version = "v0.0.8"
+    version = "v0.0.9"
   },
   {
     name    = "subliminal"
@@ -60,13 +66,13 @@ images = [
   // Rust AMD64 -> AMD64
   {
     name    = "rust-amd64-amd64"
-    version = "v1.74.0"
+    version = "v1.77.0"
     platforms = ["linux/amd64"]
   },
   // Rust AMD64 -> ARM64
   {
     name    = "rust-amd64-arm64"
-    version = "v1.74.0"
+    version = "v1.77.0"
     platforms = ["linux/amd64"]
   },
 ]
