@@ -9,11 +9,15 @@ name = "hyper-server"
 path = "src/main.rs"
 
 [dependencies]
+arc-swap = "1.7.1"
 futures = "0.3"
-hyper = { version = "0.14", features = ["full"] }
+http-body-util = "0.1.1"
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1.5", features = ["tokio"] }
 libc = "0.2"
 log = "0.4"
-tokio = {"version"= "1", features=["rt-multi-thread", "macros"]}
+ppp = "2.2.0"
+tokio = {"version"= "1", features=["rt-multi-thread", "macros", "net"]}
 tracing = "0.1"
 tracing-subscriber = "0.3"
 

@@ -1,23 +1,34 @@
-use futures::TryFutureExt;
 use std::error::Error;
-use std::ops::Add;
+use std::net::{SocketAddr, SocketAddrV4};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{convert::Infallible, sync::Mutex};
 use std::{sync::Arc, time::Instant};
 
-use futures::FutureExt;
-use hyper::server::conn::AddrStream;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server};
+use futures::{FutureExt};
+use http_body_util::Empty;
+use hyper::body::Bytes;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Request, Response};
+use ppp::v2::Addresses;
 use tokio::io;
 use tokio::io::AsyncWriteExt;
-use tracing::{info, trace, warn};
+use tracing::{info, warn};
 use tracing_subscriber::FmtSubscriber;
 
 static REQUESTS: AtomicU64 = AtomicU64::new(0);
 
-async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    Ok(Response::new(Body::from(HELLO_WORLD)))
+async fn hello_world(
+    _req: Request<hyper::body::Incoming>,
+) -> Result<Response<Empty<Bytes>>, Infallible> {
+    Ok(Response::new(Empty::new()))
+}
+
+#[derive(Copy, Clone)]
+enum ProxyTarget {
+    Proxy,
+    OrigDst,
+    Explicit(SocketAddr),
 }
 
 #[tokio::main]
@@ -31,83 +42,85 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     let proxy_type: String = std::env::var("PROXY_TYPE").unwrap_or("DIRECT".to_string());
+    let proxy_target = match std::env::var("PROXY_TARGET").as_deref() {
+        Ok("PROXY") => ProxyTarget::Proxy,
+        Ok("ORIG_DST") => ProxyTarget::OrigDst,
+        Ok(v) => ProxyTarget::Explicit(v.parse()?),
+        Err(_) => ProxyTarget::OrigDst,
+    };
     let ports_s: String = std::env::var("PORT").unwrap_or("8080".to_string());
-    let ports = ports_s.split(",");
+    let ports = ports_s.split(',');
     info!("Starting proxy type {} on ports {}", proxy_type, ports_s);
 
-    match proxy_type.as_str() {
-        "HTTP" => {
-            let mut v = Vec::new();
-            for port in ports {
-                let addr: std::net::SocketAddr = ("[::]:".to_owned() + port).parse()?;
-                info!("Listening on http://{}", addr);
-                let first_request_time: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
-                let client = Arc::new(hyper::Client::new());
-
-                let proxy_service = make_service_fn(move |socket: &AddrStream| {
-                    let orig = orig_dst_addr_stream(socket).unwrap_or(socket.remote_addr());
-                    let client = client.clone();
-                    info!(
-                        "connection established with original destination {:?}",
-                        orig
-                    );
-                    let frt = first_request_time.clone();
-                    async move {
-                        Ok::<_, Infallible>(service_fn(move |mut req: Request<Body>| {
-                            let client = client.clone();
-                            let frt = frt.clone();
-                            // TODO: use original IP, but this would require local bind to 127.0.0.6
-                            *req.uri_mut() = ("http://127.0.0.1:".to_owned()
-                                + &orig.port().to_string()
-                                + &req.uri().path().to_string())
-                                .parse()
-                                .unwrap();
-                            // let request = Request::builder()
-                            //     .method(req.method())
-                            //     .version(req.version())
-                            //     .uri("http://".to_owned() + &orig.to_string() + &req.uri().to_string())
-                            //     .headers_mut().
-                            //     .body(req.body())
-                            //     .unwrap();
-                            trace!("request: {:#?}", req);
-                            async move {
-                                let resp = client.request(req).await;
-                                trace!("response: {:#?}", resp);
-                                let rc = REQUESTS.fetch_add(1, Ordering::Relaxed);
-                                if rc == 0 {
-                                    let mut frt2 = frt.lock().unwrap();
-                                    *frt2 = Instant::now();
-                                    info!("Completed first request");
-                                } else if rc % 10000 == 0 {
-                                    info!(
-                                        "Completed request {}, rate is {:?}",
-                                        rc,
-                                        rc as f64 / frt.lock().unwrap().elapsed().as_secs_f64()
-                                    );
-                                }
-                                resp
+    let mut v = Vec::new();
+    for port in ports {
+        let first_request_time: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
+        let proxy_type = proxy_type.clone();
+        let proxy = async move {
+            let addr: std::net::SocketAddr = ("[::]:".to_owned() + port).parse().unwrap();
+            info!("Listening on http://{}", addr);
+            let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+            while let Ok((inbound, _socket)) = listener.accept().await {
+                inbound.set_nodelay(true).unwrap();
+                let frt = first_request_time.clone();
+                let target = orig_dst_addr(proxy_target, &inbound)
+                    .await
+                    .unwrap_or(inbound.peer_addr().unwrap());
+                // TODO: use original IP, but this would require local bind to 127.0.0.6
+                // orig.set_ip("127.0.0.1".parse().unwrap());
+                match proxy_type.as_str() {
+                    "HTTP" => {
+                        let outbound = tokio::net::TcpStream::connect(target).await.unwrap();
+                        outbound.set_nodelay(true).unwrap();
+                        let req = Request::builder()
+                            .uri(format!("http://{target}"))
+                            .header(hyper::header::HOST, target.to_string())
+                            .body(Empty::<Bytes>::new()).unwrap();
+                        let io = hyper_util::rt::TokioIo::new(outbound);
+                        let (sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
+                        tokio::task::spawn(async move {
+                            if let Err(err) = conn.await {
+                                println!("Connection failed: {:?}", err);
                             }
-                        }))
+                        });
+                        let sender = Arc::new(tokio::sync::Mutex::new(sender));
+                        let proxy = http1::Builder::new()
+                            .serve_connection(
+                                hyper_util::rt::TokioIo::new(inbound),
+                                service_fn(move |_req| {
+                                    let sender = sender.clone();
+                                    let rc = REQUESTS.fetch_add(1, Ordering::Relaxed);
+                                    if rc == 0 {
+                                        let mut frt2 = frt.lock().unwrap();
+                                        *frt2 = Instant::now();
+                                        println!("Completed first request");
+                                    } else if rc % 10000 == 0 {
+                                        println!(
+                                            "Completed request {}, rate is {:?}",
+                                            rc,
+                                            rc as f64 / frt.lock().unwrap().elapsed().as_secs_f64()
+                                        );
+                                    }
+                                    let req = req.clone();
+                                    async move {
+                                        let mut sender = sender.lock().await;
+                                        let _resp = sender.send_request(req).await.unwrap();
+                                        // let body = http_body_util::BodyStream::new(resp.body());
+                                        // let resp_body = http_body_util::StreamBody::new(body);
+                                        // Ok::<Response<_>, Infallible>(Response::new(resp_body))
+                                        Ok::<Response<_>, Infallible>(Response::new(Empty::<Bytes>::new()))
+                                    }
+                                }),
+                            )
+                            .map(|r| {
+                                if let Err(e) = r {
+                                    warn!("Failed to transfer; error={}", e);
+                                }
+                            });
+                        tokio::spawn(proxy);
                     }
-                });
-                let server = Server::bind(&addr).serve(proxy_service);
-                v.push(server);
-            }
-            futures::future::join_all(v).await;
-        }
-        "TCP" => {
-            let mut v = Vec::new();
-            for port in ports {
-                let first_request_time: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
-                let proxy = async move {
-                    let addr: std::net::SocketAddr = ("[::]:".to_owned() + port).parse().unwrap();
-                    info!("Listening on http://{}", addr);
-                    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-                    while let Ok((inbound, socket)) = listener.accept().await {
-                        let mut orig = orig_dst_addr(&inbound).unwrap_or(inbound.peer_addr().unwrap());
-                        // TODO: use original IP, but this would require local bind to 127.0.0.6
-                        orig.set_ip("127.0.0.1".parse().unwrap());
-                        let transfer = transfer(inbound, orig).map(|r| {
+                    "TCP" => {
+                        let transfer = transfer(inbound, target).map(|r| {
                             if let Err(e) = r {
                                 warn!("Failed to transfer; error={}", e);
                             }
@@ -115,94 +128,77 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
                         tokio::spawn(transfer);
                     }
-                };
-                v.push(proxy);
-            }
-            futures::future::join_all(v).await;
-        }
-        "DIRECT" => {
-            let mut v = Vec::new();
-            for port in ports {
-                let addr: std::net::SocketAddr = ("[::]:".to_owned() + port).parse()?;
-                println!("Listening on http://{}", addr);
-                let first_request_time: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
-                let direct_service = make_service_fn(move |socket: &AddrStream| {
-                    let frt = first_request_time.clone();
-                    async move {
-                        Ok::<_, Infallible>(service_fn(move |_req: Request<Body>| {
-                            let rc = REQUESTS.fetch_add(1, Ordering::Relaxed);
-                            if rc == 0 {
-                                let mut frt2 = frt.lock().unwrap();
-                                *frt2 = Instant::now();
-                                println!("Completed first request");
-                            } else if rc % 10000 == 0 {
-                                println!(
-                                    "Completed request {}, rate is {:?}",
-                                    rc,
-                                    rc as f64 / frt.lock().unwrap().elapsed().as_secs_f64()
-                                );
-                            }
-                            hello_world(_req)
-                        }))
+                    "DIRECT" => {
+                        let proxy = http1::Builder::new()
+                            .serve_connection(
+                                hyper_util::rt::TokioIo::new(inbound),
+                                service_fn(move |_req| {
+                                    let rc = REQUESTS.fetch_add(1, Ordering::Relaxed);
+                                    if rc == 0 {
+                                        let mut frt2 = frt.lock().unwrap();
+                                        *frt2 = Instant::now();
+                                        println!("Completed first request");
+                                    } else if rc % 10000 == 0 {
+                                        println!(
+                                            "Completed request {}, rate is {:?}",
+                                            rc,
+                                            rc as f64 / frt.lock().unwrap().elapsed().as_secs_f64()
+                                        );
+                                    }
+                                    hello_world(_req)
+                                }),
+                            )
+                            .map(|r| {
+                                if let Err(e) = r {
+                                    warn!("Failed to transfer; error={}", e);
+                                }
+                            });
+                        tokio::spawn(proxy);
                     }
-                });
-                let server = Server::bind(&addr).serve(direct_service);
-                v.push(server);
+                    _ => {
+                        panic!("invalid proxy_type {}", proxy_type);
+                    }
+                }
             }
-            futures::future::join_all(v).await;
-        }
-        _ => {
-            panic!("invalid proxy_type {}", proxy_type);
-        }
+        };
+        v.push(proxy);
     }
-
+    futures::future::join_all(v).await;
     Ok(())
 }
 
-static HELLO_WORLD: &'static [u8] = b"";
-
 #[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
-fn orig_dst_addr(sock: &tokio::net::TcpStream) -> tokio::io::Result<std::net::SocketAddr> {
-    use std::os::unix::io::AsRawFd;
-    let fd = sock.as_raw_fd();
-    unsafe { linux::so_original_dst(fd) }
-}
-
-#[cfg(target_os = "linux")]
-#[allow(unsafe_code)]
-fn orig_dst_addr2<T: std::os::unix::io::AsRawFd>(
-    sock: T,
+async fn orig_dst_addr(
+    mode: ProxyTarget,
+    sock: &tokio::net::TcpStream,
 ) -> tokio::io::Result<std::net::SocketAddr> {
     use std::os::unix::io::AsRawFd;
-    let fd = sock.as_raw_fd();
-    unsafe { linux::so_original_dst(fd) }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn orig_dst_addr2<T: std::os::unix::io::AsRawFd>(_: T) -> tokio::io::Result<std::net::SocketAddr> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        "SO_ORIGINAL_DST not supported on this operating system",
-    ))
-}
-
-fn orig_dst_addr_stream(sock: &AddrStream) -> tokio::io::Result<std::net::SocketAddr> {
-    use std::os::unix::io::AsRawFd;
-    let fd = sock.as_raw_fd();
-    unsafe { linux::so_original_dst(fd) }
+    match mode {
+        ProxyTarget::Proxy => {
+            let mut buffer = [0; 512];
+            let read = 0;
+            sock.peek(&mut buffer).await?;
+            let header = ppp::HeaderResult::parse(&buffer[..read]);
+            let ppp::HeaderResult::V2(Ok(header)) = header else {
+                panic!("did not parse proxy protocol");
+            };
+            let Addresses::IPv4(addresses) = header.addresses else {
+                panic!("no ipv4 addresses in proxy protocol");
+            };
+            let addr = SocketAddrV4::new(addresses.destination_address, addresses.destination_port);
+            Ok(addr.into())
+        }
+        ProxyTarget::OrigDst => {
+            let fd = sock.as_raw_fd();
+            unsafe { linux::so_original_dst(fd) }
+        }
+        ProxyTarget::Explicit(dst) => Ok(dst),
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
 fn orig_dst_addr(_: &TcpStream) -> io::Result<SocketAddr> {
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        "SO_ORIGINAL_DST not supported on this operating system",
-    ))
-}
-
-#[cfg(not(target_os = "linux"))]
-fn orig_dst_addr_stream(_: AddrStream) -> io::Result<SocketAddr> {
     Err(io::Error::new(
         io::ErrorKind::Other,
         "SO_ORIGINAL_DST not supported on this operating system",
@@ -306,6 +302,7 @@ async fn transfer(
     proxy_addr: std::net::SocketAddr,
 ) -> Result<(), Box<dyn Error>> {
     let mut outbound = tokio::net::TcpStream::connect(proxy_addr).await?;
+    outbound.set_nodelay(true)?;
 
     let (mut ri, mut wi) = inbound.split();
     let (mut ro, mut wo) = outbound.split();
