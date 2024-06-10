@@ -18,7 +18,8 @@ images = [
   },
   {
     name    = "hyper-server"
-    version = "v0.0.15"
+    version = "v0.0.21"
+    platforms = ["linux/amd64"]
     dependencies = ["rust-amd64-amd64", "rust-amd64-arm64"]
   },
   {

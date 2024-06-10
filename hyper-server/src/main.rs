@@ -12,7 +12,7 @@ use hyper::service::service_fn;
 use hyper::{Request, Response};
 use ppp::v2::Addresses;
 use tokio::io;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{info, warn};
 use tracing_subscriber::FmtSubscriber;
 
@@ -26,8 +26,8 @@ async fn hello_world(
 
 #[derive(Copy, Clone)]
 enum ProxyTarget {
-    Proxy,
     OrigDst,
+    Proxy(Option<SocketAddr>),
     Explicit(SocketAddr),
 }
 
@@ -43,9 +43,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     let proxy_type: String = std::env::var("PROXY_TYPE").unwrap_or("DIRECT".to_string());
     let proxy_target = match std::env::var("PROXY_TARGET").as_deref() {
-        Ok("PROXY") => ProxyTarget::Proxy,
+        Ok("PROXY") => ProxyTarget::Proxy(None),
         Ok("ORIG_DST") => ProxyTarget::OrigDst,
-        Ok(v) => ProxyTarget::Explicit(v.parse()?),
+        Ok(v) if v.starts_with("PROXY/") => ProxyTarget::Proxy(Some(v.strip_prefix("PROXY/").unwrap().parse()?)),
+        Ok(v)  => ProxyTarget::Explicit(v.parse()?),
         Err(_) => ProxyTarget::OrigDst,
     };
     let ports_s: String = std::env::var("PORT").unwrap_or("8080".to_string());
@@ -60,10 +61,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             let addr: std::net::SocketAddr = ("[::]:".to_owned() + port).parse().unwrap();
             info!("Listening on http://{}", addr);
             let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-            while let Ok((inbound, _socket)) = listener.accept().await {
+            while let Ok((mut inbound, _socket)) = listener.accept().await {
                 inbound.set_nodelay(true).unwrap();
                 let frt = first_request_time.clone();
-                let target = orig_dst_addr(proxy_target, &inbound)
+                let target = orig_dst_addr(proxy_target, &mut inbound)
                     .await
                     .unwrap_or(inbound.peer_addr().unwrap());
                 // TODO: use original IP, but this would require local bind to 127.0.0.6
@@ -80,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         let (sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
                         tokio::task::spawn(async move {
                             if let Err(err) = conn.await {
-                                println!("Connection failed: {:?}", err);
+                                eprintln!("Connection failed: {:?}", err);
                             }
                         });
                         let sender = Arc::new(tokio::sync::Mutex::new(sender));
@@ -115,6 +116,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             .map(|r| {
                                 if let Err(e) = r {
                                     warn!("Failed to transfer; error={}", e);
+                                } else {
+                                    info!("Connection complete without error");
                                 }
                             });
                         tokio::spawn(proxy);
@@ -171,14 +174,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 #[allow(unsafe_code)]
 async fn orig_dst_addr(
     mode: ProxyTarget,
-    sock: &tokio::net::TcpStream,
+    sock: &mut tokio::net::TcpStream,
 ) -> tokio::io::Result<std::net::SocketAddr> {
     use std::os::unix::io::AsRawFd;
     match mode {
-        ProxyTarget::Proxy => {
+        ProxyTarget::Proxy(dst) => {
             let mut buffer = [0; 512];
-            let read = 0;
-            sock.peek(&mut buffer).await?;
+            let read = sock.peek(&mut buffer).await?;
             let header = ppp::HeaderResult::parse(&buffer[..read]);
             let ppp::HeaderResult::V2(Ok(header)) = header else {
                 panic!("did not parse proxy protocol");
@@ -187,7 +189,9 @@ async fn orig_dst_addr(
                 panic!("no ipv4 addresses in proxy protocol");
             };
             let addr = SocketAddrV4::new(addresses.destination_address, addresses.destination_port);
-            Ok(addr.into())
+            let mut drain = vec![0; read];
+            sock.read_exact(&mut drain).await?;
+            Ok(dst.unwrap_or(addr.into()))
         }
         ProxyTarget::OrigDst => {
             let fd = sock.as_raw_fd();
