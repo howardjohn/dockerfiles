@@ -28,7 +28,7 @@ function to_ms() {
   if [[ "${stdin}" == "" ]]; then
     echo "-"
   else
-    python3 -c "print(\"%.02fms\" % (${stdin}*1000))"
+    python3 -c "print(\"%.03fms\" % (${stdin}*1000))"
   fi
 }
 
@@ -165,7 +165,7 @@ function run_benchmark() {
   case "$tool" in
   fortio)
     rm -f "${RESULTS_DIR}/fortio" &> /dev/null
-    run fortio load -uniform="${JITTER}" -qps "${qps}" -t "${dur}"s -c "${cons}" -payload-size "${payload}" -httpccch -json "${RESULTS_DIR}"/fortio.json -r 0.00001 "${dest}"
+    run fortio load -uniform="${JITTER}" -qps "${qps}" -t "${dur}"s -c "${cons}" -payload-size "${payload}" -httpccch -json "${RESULTS_DIR}"/fortio.json -r 0.000001 "${dest}"
     req=$(< "${RESULTS_DIR}"/fortio.json jq -r '.RetCodes."200"')
     throughput=$(< "${RESULTS_DIR}"/fortio.json jq '.ActualQPS' | fmt_qps)
     p50=$(< "${RESULTS_DIR}"/fortio.json jq '.DurationHistogram.Percentiles[] | select(.Percentile == 50).Value' | to_ms)
@@ -190,9 +190,9 @@ function run_benchmark() {
     run oha --no-tui ${OHA_QPS} -z "${dur}"s -c "${cons}" "${dest}"
     req=$(< "${RESULTS_DIR}"/oha grep '\[200\]' | cut -d' ' -f 4)
     throughput=$(< "${RESULTS_DIR}"/oha grep 'Requests' | cut -f2 | fmt_qps)
-    p50=$(< "${RESULTS_DIR}"/oha grep '50%' | cut -d' ' -f5 | to_ms)
-    p90=$(< "${RESULTS_DIR}"/oha grep '90%' | cut -d' ' -f5 | to_ms)
-    p99=$(< "${RESULTS_DIR}"/oha grep '99%' | cut -d' ' -f5 | to_ms)
+    p50=$(< "${RESULTS_DIR}"/oha grep '50.00%' | cut -d' ' -f5 | to_ms)
+    p90=$(< "${RESULTS_DIR}"/oha grep '90.00%' | cut -d' ' -f5 | to_ms)
+    p99=$(< "${RESULTS_DIR}"/oha grep '99.00%' | cut -d' ' -f5 | to_ms)
     ;;
   nighthawk)
     # Nighthawk doesn't support qps==0, set to high number
@@ -205,7 +205,7 @@ function run_benchmark() {
       j=$(python3 -c 'print(f"{float(0.1 * 1 / '$qps'):.9f}")')
       jitter="--jitter-uniform ${j}s"
     fi
-    run nighthawk ${NIGHTHAWK_QPS} --connections "${cons}" ${jitter} --duration "${dur}" --concurrency 1 "${dest}" --output-format fortio --prefetch-connections
+    run nighthawk ${NIGHTHAWK_QPS} --connections "${cons}" ${jitter} --duration "${dur}" --concurrency "${payload}" "${dest}" --output-format fortio --prefetch-connections
     req=$(< "${RESULTS_DIR}"/nighthawk jq -r '.RetCodes."200"')
     throughput=$(< "${RESULTS_DIR}"/nighthawk jq '.ActualQPS' | fmt_qps)
     p50=$(< "${RESULTS_DIR}"/nighthawk jq '.DurationHistogram.Percentiles[] | select(.Percentile == 50).Value' | to_ms)
