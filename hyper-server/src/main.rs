@@ -1,16 +1,19 @@
-use std::error::Error;
-use std::net::{SocketAddr, SocketAddrV4};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::{convert::Infallible, sync::Mutex};
-use std::{sync::Arc, time::Instant};
-
-use futures::{FutureExt};
-use http_body_util::Empty;
-use hyper::body::Bytes;
+use futures::FutureExt;
+use http_body_util::{BodyExt, Empty};
+use hyper::body::{Body, Bytes, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use ppp::v2::Addresses;
+use std::error::Error;
+use std::future::Future;
+use std::net::{SocketAddr, SocketAddrV4};
+use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::task::{ready, Context, Poll};
+use std::thread::spawn;
+use std::{convert::Infallible, sync::Mutex};
+use std::{sync::Arc, time::Instant};
 use tokio::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{info, warn};
@@ -18,9 +21,33 @@ use tracing_subscriber::FmtSubscriber;
 
 static REQUESTS: AtomicU64 = AtomicU64::new(0);
 
+struct Drain(Incoming);
+
+impl Future for Drain {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            let this = &mut self.0;
+            let frame = ready!(Pin::new(this).poll_frame(cx));
+
+            match frame {
+                None | Some(Err(_)) => {
+                    return Poll::Ready(());
+                }
+                _ => {}
+            };
+        }
+    }
+}
+
 async fn hello_world(
-    _req: Request<hyper::body::Incoming>,
+    mut req: Request<hyper::body::Incoming>,
 ) -> Result<Response<Empty<Bytes>>, Infallible> {
+    let body = req.into_body();
+    if !body.is_end_stream() {
+        tokio::task::spawn(async move { Drain(body).await });
+    }
     Ok(Response::new(Empty::new()))
 }
 
@@ -45,8 +72,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let proxy_target = match std::env::var("PROXY_TARGET").as_deref() {
         Ok("PROXY") => ProxyTarget::Proxy(None),
         Ok("ORIG_DST") => ProxyTarget::OrigDst,
-        Ok(v) if v.starts_with("PROXY/") => ProxyTarget::Proxy(Some(v.strip_prefix("PROXY/").unwrap().parse()?)),
-        Ok(v)  => ProxyTarget::Explicit(v.parse()?),
+        Ok(v) if v.starts_with("PROXY/") => {
+            ProxyTarget::Proxy(Some(v.strip_prefix("PROXY/").unwrap().parse()?))
+        }
+        Ok(v) => ProxyTarget::Explicit(v.parse()?),
         Err(_) => ProxyTarget::OrigDst,
     };
     let ports_s: String = std::env::var("PORT").unwrap_or("8080".to_string());
@@ -76,9 +105,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         let req = Request::builder()
                             .uri(format!("http://{target}"))
                             .header(hyper::header::HOST, target.to_string())
-                            .body(Empty::<Bytes>::new()).unwrap();
+                            .body(Empty::<Bytes>::new())
+                            .unwrap();
                         let io = hyper_util::rt::TokioIo::new(outbound);
-                        let (sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
+                        let (sender, conn) =
+                            hyper::client::conn::http1::handshake(io).await.unwrap();
                         tokio::task::spawn(async move {
                             if let Err(err) = conn.await {
                                 eprintln!("Connection failed: {:?}", err);
@@ -109,7 +140,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                                         // let body = http_body_util::BodyStream::new(resp.body());
                                         // let resp_body = http_body_util::StreamBody::new(body);
                                         // Ok::<Response<_>, Infallible>(Response::new(resp_body))
-                                        Ok::<Response<_>, Infallible>(Response::new(Empty::<Bytes>::new()))
+                                        Ok::<Response<_>, Infallible>(Response::new(
+                                            Empty::<Bytes>::new(),
+                                        ))
                                     }
                                 }),
                             )

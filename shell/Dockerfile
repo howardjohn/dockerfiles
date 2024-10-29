@@ -4,7 +4,8 @@ RUN \
   apk add --no-cache \
     curl \
     bash \
-    openssl
+    openssl \
+    netcat-openbsd
 
 ENV XDG_CONFIG_HOME=/root/.config
 COPY inputrc /root/.inputrc

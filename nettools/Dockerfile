@@ -8,4 +8,6 @@ RUN \
     jq \
     tcpdump \
     bind-tools \
-    iptables
+    iptables \
+    ip6tables
+

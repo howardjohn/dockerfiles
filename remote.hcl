@@ -1,1 +1,1 @@
-hubs = ["localhost:5000", "howardjohn"]
+hubs = ["howardjohn"]
