@@ -1,12 +1,12 @@
-FROM envoyproxy/nighthawk-dev@sha256:4f0085b98117fc1c505b0c993e1b8cfa32c52874153b10a76af904e4fcd60a38 as nighthawk
-FROM fortio/fortio:1.67.1 as fortio
-FROM howardjohn/wrk2 as wrk
+FROM envoyproxy/nighthawk-dev@sha256:4f0085b98117fc1c505b0c993e1b8cfa32c52874153b10a76af904e4fcd60a38 AS nighthawk
+FROM fortio/fortio:1.68.1 AS fortio
+FROM howardjohn/wrk2 AS wrk
 FROM howardjohn/nettools
 
 RUN apk add --no-cache \
-  python3 \
-  iperf3 \
-  util-linux-misc
+    python3 \
+    iperf3 \
+    util-linux-misc
 
 ARG TARGETARCH
 

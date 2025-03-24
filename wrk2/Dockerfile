@@ -1,4 +1,4 @@
-FROM debian as builder
+FROM debian AS builder
 
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
@@ -11,7 +11,7 @@ RUN apt-get update && \
 
 RUN git clone https://github.com/giltene/wrk2.git && cd wrk2 && make && cp wrk /usr/bin/wrk && cd .. && rm -rf wrk2
 
-FROM cgr.dev/chainguard/cc-dynamic:latest
+FROM cgr.dev/chainguard/glibc-dynamic:latest
 
 COPY --from=builder /usr/bin/wrk /usr/bin/wrk
 

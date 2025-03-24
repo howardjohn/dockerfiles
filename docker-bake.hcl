@@ -9,7 +9,7 @@ variable "platforms" {
 images = [
   {
     name         = "benchtool"
-    version      = "v0.0.15"
+    version      = "v0.0.16"
     dependencies = ["wrk2", "nettools"]
   },
   {
@@ -17,19 +17,22 @@ images = [
     version = "v0.0.5"
   },
   {
+    name    = "cmcp"
+    version = "v0.0.1"
+  },
+  {
     name    = "hyper-server"
-    version = "v0.0.22"
-    platforms = ["linux/amd64"]
+    version = "v0.0.23"
     dependencies = ["rust-amd64-amd64", "rust-amd64-arm64"]
   },
   {
     name         = "kubectl"
-    version      = "v1.31.0"
+    version      = "v1.32.2"
     dependencies = ["shell"]
   },
   {
     name    = "netperf"
-    version = "v0.0.3"
+    version = "v0.0.4"
     dependencies = ["shell", "rust-amd64-amd64", "rust-amd64-arm64"]
   },
   {
@@ -39,7 +42,7 @@ images = [
   },
   {
     name         = "nettools"
-    version      = "v0.0.9"
+    version      = "v0.0.10"
     dependencies = ["shell"]
   },
   {
@@ -57,23 +60,23 @@ images = [
   },
   {
     name    = "tailscale"
-    version = "v1.76.1"
+    version = "v1.80.3"
   },
   {
     name    = "wrk2"
-    version = "v0.0.2"
+    version = "v0.0.3"
     platforms = ["linux/amd64"]
   },
   // Rust AMD64 -> AMD64
   {
     name    = "rust-amd64-amd64"
-    version = "v1.82.0"
+    version = "v1.85.1"
     platforms = ["linux/amd64"]
   },
   // Rust AMD64 -> ARM64
   {
     name    = "rust-amd64-arm64"
-    version = "v1.82.0"
+    version = "v1.85.1"
     platforms = ["linux/amd64"]
   },
 ]

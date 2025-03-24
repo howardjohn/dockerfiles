@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base as builder
+FROM cgr.dev/chainguard/wolfi-base AS builder
 
 RUN apk add build-base curl
 RUN curl -L https://github.com/HewlettPackard/netperf/archive/netperf-2.7.0.tar.gz | tar zx
