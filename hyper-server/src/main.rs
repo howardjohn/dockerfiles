@@ -1,5 +1,5 @@
 use futures::FutureExt;
-use http_body_util::{BodyExt, Empty};
+use http_body_util::Empty;
 use hyper::body::{Body, Bytes, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -10,8 +10,7 @@ use std::future::Future;
 use std::net::{SocketAddr, SocketAddrV4};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::task::{ready, Context, Poll};
-use std::thread::spawn;
+use std::task::{Context, Poll, ready};
 use std::{convert::Infallible, sync::Mutex};
 use std::{sync::Arc, time::Instant};
 use tokio::io;
@@ -42,11 +41,11 @@ impl Future for Drain {
 }
 
 async fn hello_world(
-    mut req: Request<hyper::body::Incoming>,
+    req: Request<hyper::body::Incoming>,
 ) -> Result<Response<Empty<Bytes>>, Infallible> {
     let body = req.into_body();
     if !body.is_end_stream() {
-        tokio::task::spawn(async move { Drain(body).await });
+        tokio::task::spawn(Drain(body));
     }
     Ok(Response::new(Empty::new()))
 }
@@ -112,7 +111,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             hyper::client::conn::http1::handshake(io).await.unwrap();
                         tokio::task::spawn(async move {
                             if let Err(err) = conn.await {
-                                eprintln!("Connection failed: {:?}", err);
+                                eprintln!("Connection failed: {err:?}");
                             }
                         });
                         let sender = Arc::new(tokio::sync::Mutex::new(sender));
@@ -165,34 +164,40 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                         tokio::spawn(transfer);
                     }
                     "DIRECT" => {
-                        let proxy = http1::Builder::new()
-                            .serve_connection(
-                                hyper_util::rt::TokioIo::new(inbound),
-                                service_fn(move |_req| {
-                                    let rc = REQUESTS.fetch_add(1, Ordering::Relaxed);
-                                    if rc == 0 {
-                                        let mut frt2 = frt.lock().unwrap();
-                                        *frt2 = Instant::now();
-                                        println!("Completed first request");
-                                    } else if rc % 10000 == 0 {
-                                        println!(
-                                            "Completed request {}, rate is {:?}",
-                                            rc,
-                                            rc as f64 / frt.lock().unwrap().elapsed().as_secs_f64()
-                                        );
+                        tokio::spawn(async move {
+                            let builder = hyper_util::server::conn::auto::Builder::new(
+                                ::hyper_util::rt::TokioExecutor::new(),
+                            );
+                            builder
+                                .serve_connection(
+                                    hyper_util::rt::TokioIo::new(inbound),
+                                    service_fn(move |_req| {
+                                        let rc = REQUESTS.fetch_add(1, Ordering::Relaxed);
+                                        if rc == 0 {
+                                            let mut frt2 = frt.lock().unwrap();
+                                            *frt2 = Instant::now();
+                                            println!("Completed first request");
+                                        } else if rc % 10000 == 0 {
+                                            println!(
+                                                "Completed request {}, rate is {:?}",
+                                                rc,
+                                                rc as f64
+                                                    / frt.lock().unwrap().elapsed().as_secs_f64()
+                                            );
+                                        }
+                                        hello_world(_req)
+                                    }),
+                                )
+                                .map(|r| {
+                                    if let Err(e) = r {
+                                        warn!("Failed to transfer; error={}", e);
                                     }
-                                    hello_world(_req)
-                                }),
-                            )
-                            .map(|r| {
-                                if let Err(e) = r {
-                                    warn!("Failed to transfer; error={}", e);
-                                }
-                            });
-                        tokio::spawn(proxy);
+                                })
+                                .await
+                        });
                     }
                     _ => {
-                        panic!("invalid proxy_type {}", proxy_type);
+                        panic!("invalid proxy_type {proxy_type}");
                     }
                 }
             }
@@ -252,21 +257,23 @@ mod linux {
     use log::warn;
 
     pub unsafe fn so_original_dst(fd: RawFd) -> io::Result<SocketAddr> {
-        let mut sockaddr: libc::sockaddr_storage = mem::zeroed();
-        let mut socklen: libc::socklen_t = mem::size_of::<libc::sockaddr_storage>() as u32;
-        let ret = libc::getsockopt(
-            fd,
-            libc::SOL_IP,
-            libc::SO_ORIGINAL_DST,
-            &mut sockaddr as *mut _ as *mut _,
-            &mut socklen as *mut _ as *mut _,
-        );
-        if ret != 0 {
-            let e = io::Error::last_os_error();
-            warn!("failed to read SO_ORIGINAL_DST: {:?}", e);
-            return Err(e);
+        unsafe {
+            let mut sockaddr: libc::sockaddr_storage = mem::zeroed();
+            let mut socklen: libc::socklen_t = mem::size_of::<libc::sockaddr_storage>() as u32;
+            let ret = libc::getsockopt(
+                fd,
+                libc::SOL_IP,
+                libc::SO_ORIGINAL_DST,
+                &mut sockaddr as *mut _ as *mut _,
+                &mut socklen as *mut _ as *mut _,
+            );
+            if ret != 0 {
+                let e = io::Error::last_os_error();
+                warn!("failed to read SO_ORIGINAL_DST: {e:?}");
+                return Err(e);
+            }
+            mk_addr(&sockaddr, socklen)
         }
-        mk_addr(&sockaddr, socklen)
     }
 
     // Borrowed with love from net2-rs

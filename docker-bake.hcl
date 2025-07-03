@@ -18,11 +18,11 @@ images = [
   },
   {
     name    = "cmcp"
-    version = "v0.0.1"
+    version = "v0.0.2"
   },
   {
     name    = "hyper-server"
-    version = "v0.0.23"
+    version = "v0.0.24"
     dependencies = ["rust-amd64-amd64", "rust-amd64-arm64"]
   },
   {
@@ -64,19 +64,19 @@ images = [
   },
   {
     name    = "wrk2"
-    version = "v0.0.3"
+    version = "v0.0.4"
     platforms = ["linux/amd64"]
   },
   // Rust AMD64 -> AMD64
   {
     name    = "rust-amd64-amd64"
-    version = "v1.85.1"
+    version = "v1.88.0"
     platforms = ["linux/amd64"]
   },
   // Rust AMD64 -> ARM64
   {
     name    = "rust-amd64-arm64"
-    version = "v1.85.1"
+    version = "v1.88.0"
     platforms = ["linux/amd64"]
   },
 ]

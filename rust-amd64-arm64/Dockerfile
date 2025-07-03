@@ -1,7 +1,7 @@
 ARG VERSIONNUM
 FROM --platform=$BUILDPLATFORM rust:${VERSIONNUM}-slim
 
-RUN cargo install cargo-chef --locked --version 0.1.62 \
+RUN cargo install cargo-chef --locked --version 0.1.72 \
     && rm -rf $CARGO_HOME/registry/
 
 RUN apt-get update && \
