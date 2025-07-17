@@ -219,12 +219,17 @@ function run_benchmark() {
       WRK_QPS="--rate 10000000"
     fi
 
-    run wrk ${WRK_QPS} --connections "${cons}" --duration "${dur}"s "${dest}" -U
+    # Add http:// if dest does not start with http:// or https://
+    if [[ ! "${dest}" =~ ^https?:// ]]; then
+      dest="http://${dest}"
+    fi
+    threads=$(($(nproc) < ${cons} ? $(nproc) : ${cons}))
+    run wrk ${WRK_QPS} --connections "${cons}" --threads "${threads}" --duration "${dur}"s -L "${dest}"
     req=$(< "${RESULTS_DIR}"/wrk grep 'requests in' | xargs | cut -d' ' -f1)
     throughput=$(< "${RESULTS_DIR}"/wrk grep Requests/sec: | tr -s ' ' | cut -d' ' -f2 | fmt_qps)
-    p50=$(< "${RESULTS_DIR}"/wrk grep '50.000%' | tr -s ' ' | xargs | cut -d' ' -f4)
-    p90=$(< "${RESULTS_DIR}"/wrk grep '90.000%' | tr -s ' ' | xargs | cut -d' ' -f4)
-    p99=$(< "${RESULTS_DIR}"/wrk grep '99.000%' | tr -s ' ' | xargs | cut -d' ' -f4)
+    p50=$(< "${RESULTS_DIR}"/wrk grep '50.000%' | tr -s ' ' | cut -d' ' -f3)
+    p90=$(< "${RESULTS_DIR}"/wrk grep '90.000%' | tr -s ' ' | cut -d' ' -f3)
+    p99=$(< "${RESULTS_DIR}"/wrk grep '99.000%' | tr -s ' ' | cut -d' ' -f3)
     ;;
   *)
     red "Unknown tool $tool"
